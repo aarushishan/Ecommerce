@@ -1,0 +1,52 @@
+services:
+  # PostgreSQL Database Container
+  db:
+    image: postgres:15-alpine
+    container_name: shopsphere_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shopsphere_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shopsphere_password}
+      POSTGRES_DB: ${POSTGRES_DB:-shopsphere_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shopsphere_user} -d ${POSTGRES_DB:-shopsphere_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: shopsphere_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-shopsphere_user}:${POSTGRES_PASSWORD:-shopsphere_password}@db:5432/${POSTGRES_DB:-shopsphere_db}
+      - SECRET_KEY=${SECRET_KEY:-default_secret_key_change_in_production}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+  # React Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: shopsphere_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+
+volumes:
+  postgres_data:
